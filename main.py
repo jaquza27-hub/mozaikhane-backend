@@ -1,11 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import time
 
-app = FastAPI()
+app = FastAPI(title="MozaikHane API", version="1.0", redirect_slashes=False)
 
-# Tüm tarayıcılardan ve domainlerden istek alabilmesi için CORS ayarı
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,36 +11,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Bellekte tutulacak ortak veri tabanı
-shared_grid_data = {}
+database = {
+    "stats": {"total_visitors": 0, "active_users": 1},
+    "grids": {}
+}
 
-class SlotData(BaseModel):
-    size: int
-    name: str
-    url: str
-    platform: str
-    logoMode: str
-    customLogo: str
-    expireTime: int
+@app.get("/api/stats")
+def get_stats():
+    return database["stats"]
+
+@app.post("/api/stats/visit")
+def increment_visitor():
+    database["stats"]["total_visitors"] += 1
+    return {"total_visitors": database["stats"]["total_visitors"]}
 
 @app.get("/api/grid")
-def get_grid():
-    # Süresi dolanları otomatik temizle (30 gün)
-    now = time.time() * 1000
-    expired_keys = [k for k, v in shared_grid_data.items() if now > v.get("expireTime", 0)]
-    for k in expired_keys:
-        del shared_grid_data[k]
-        
-    return shared_grid_data
+def get_all_grids():
+    return database["grids"]
 
-@app.post("/api/grid/{slot_id}")
-def update_grid(slot_id: str, data: SlotData):
-    shared_grid_data[slot_id] = data.dict()
-    return {"status": "success", "message": f"Slot {slot_id} güncellendi."}
+@app.get("/api/grid/{category}")
+def get_grid(category: str):
+    return database["grids"].get(category, {})
 
-@app.delete("/api/grid/{slot_id}")
-def delete_grid(slot_id: str):
-    if slot_id in shared_grid_data:
-        del shared_grid_data[slot_id]
-        return {"status": "success"}
-    raise HTTPException(status_code=404, detail="Slot bulunamadı")
+@app.post("/api/grid/{category}")
+async def save_grid(category: str, request: Request):
+    try:
+        body = await request.json()
+        if isinstance(body, dict) and "grid_data" in body:
+            database["grids"][category] = body["grid_data"]
+        else:
+            database["grids"][category] = body
+        return {"status": "success", "category": category}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
