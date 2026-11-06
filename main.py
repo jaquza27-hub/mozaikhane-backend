@@ -25,7 +25,8 @@ def load_db():
             pass
     return {
         "stats": {"total_visitors": 0},
-        "active_sessions": {}
+        "active_sessions": {},
+        "grids": {}
     }
 
 def save_db(data):
@@ -35,15 +36,14 @@ def save_db(data):
 @app.get("/api/stats")
 def get_stats():
     db = load_db()
-    
-    # Son 30 saniye içinde ping atmış aktif kullanıcıları say
     current_time = time.time()
     active_sessions = db.get("active_sessions", {})
-    active_count = sum(1 for t in active_sessions.values() if current_time - t < 30)
+    # Son 45 saniyede ping atan gerçek aktif kullanıcı sayısı
+    active_count = sum(1 for t in active_sessions.values() if current_time - t < 45)
     
     return {
         "total_visitors": db["stats"]["total_visitors"],
-        "active_users": max(1, active_count)  # En az 1 göster
+        "active_users": max(1, active_count)
     }
 
 @app.post("/api/stats/visit")
@@ -64,10 +64,9 @@ async def active_ping(request: Request):
                 db["active_sessions"] = {}
             db["active_sessions"][session_id] = time.time()
             
-            # Eski oturumları temizle (1 dakikadan eski)
+            # Eski oturumları temizle
             current_time = time.time()
             db["active_sessions"] = {k: v for k, v in db["active_sessions"].items() if current_time - v < 60}
-            
             save_db(db)
         return {"status": "ok"}
     except:
